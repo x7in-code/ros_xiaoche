@@ -73,6 +73,43 @@ race_abot_411/
 
 ## 4. 部署到车上
 
+### 4.0 从小车 Git 拉取代码（推荐方式）
+
+仓库：`https://github.com/x7in-code/ros_xiaoche.git`（分支 `main`）
+
+> ⚠️ **注意：仓库名是 `ros_xiaoche`，但包名是 `race_abot_411`**。
+> 直接在 `src` 里 `git clone` 会得到 `src/ros_xiaoche/`，**目录名与包名不一致，catkin 会警告/不认**。
+> 所以 **必须指定目标目录名**：
+
+```bash
+# 0) 车上装 git（如果还没有）
+sudo apt install -y git
+
+# 1) clone 到 src，并指定目录名为包名（关键！）
+cd ~/catkin_ws/src
+git clone https://github.com/x7in-code/ros_xiaoche.git race_abot_411
+# 网络慢可加 --depth 1 只拉最新一次提交：
+# git clone --depth 1 https://github.com/x7in-code/ros_xiaoche.git race_abot_411
+
+# 2) 确认目录名和包名一致
+grep "<name>" race_abot_411/package.xml      # 应输出 race_abot_411
+
+# 3) 加权限 + 编译 + source
+chmod +x race_abot_411/scripts/*.py race_abot_411/tools/*.sh
+cd ~/catkin_ws
+source /opt/ros/noetic/setup.bash
+catkin_make
+source devel/setup.bash
+```
+
+**以后更新代码**（队友推了新提交）：
+```bash
+bash ~/catkin_ws/src/race_abot_411/tools/race_abot_411_update.sh
+# 该脚本 = git pull + 修 CRLF + chmod + catkin_make + source，一条命令搞定
+```
+
+私有仓库需要认证：HTTPS 用「用户名 + Personal Access Token」，或配 SSH key（`ssh-keygen -t ed25519` 后把公钥加到 GitHub）。
+
 ### 4.1 放到哪个文件夹
 
 放小车上 ROS 工作区的 **`src/`** 目录里，即 **`~/catkin_ws/src/`**（本车工作区路径由编译缓存确认）：
@@ -243,6 +280,9 @@ bash tools/race_abot_411_rename.sh --apply race_你的队名         # 真正改
 - **新增启动 3 秒自检报告**：启动后自动报告相机/里程计/超声/检测四路是否有数据。
 - **里程计失联告警**：超过 `odom_stale_warn_s` 没收到 `/odom` 会周期告警（闭环动作会失效）。
 - 显示节流由 `time` 取模改为帧计数，刷新更稳定；`loginfo_throttle` 替代重复日志刷屏。
+- **新增 `.gitattributes`（`* text=auto eol=lf`）+ `.gitignore`**：从仓库层面强制 LF 换行，
+  防止有人在 Windows 提交 CRLF 后，小车 clone 下来报 `bad interpreter: /usr/bin/env python3^M`。
+- **新增 `tools/race_abot_411_update.sh`**：车上一键更新（git pull → 修 CRLF → chmod → catkin_make → source）。
 
 ### v1.0
 - 首个版本：任务队列状态机 + 巡线 + 标志检测 + 动作库（含避障/过桥/S弯/泊车/车库搬运）。

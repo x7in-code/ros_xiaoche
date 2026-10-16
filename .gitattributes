@@ -1,0 +1,14 @@
+# 强制所有文本文件在仓库里和检出后都用 LF 换行。
+# 原因：ROS/Python/shell 在 Linux 跑，CRLF 会导致
+#   - python 脚本报 "bad interpreter: /usr/bin/env python3^M"
+#   - .sh 脚本报 $'\r': command not found
+# 这样即使有人用 Windows 提交，小车 clone 下来也是 LF。
+* text=auto eol=lf
+
+# 二进制文件不要做换行转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.pt binary
+*.onnx binary
+*.bag binary
