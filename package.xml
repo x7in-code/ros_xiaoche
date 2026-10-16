@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>race_abot_411</name>
+  <version>1.0.0</version>
+
+  <description>
+    无人车自动驾驶任务挑战赛 - A 路线任务实现（全新独立代码）
+    ── 按《附件3-无人车自动驾驶任务挑战赛比赛规则》与《标识.pdf》实现
+    ── 与其他队伍共用同一辆小车，本包所有文件以 race_abot_411_ 前缀命名，避免冲突
+    ── 不修改原 traffic_detector / abot_project 任何文件
+  </description>
+
+  <maintainer email="team@example.com">race_abot_411 team</maintainer>
+  <license>Proprietary</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <!-- 自定义底盘消息（阿克曼：linear / angular / diff） -->
+  <depend>abot_driver</depend>
+
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>topic_tools</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+</package>

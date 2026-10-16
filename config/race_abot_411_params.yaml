@@ -1,0 +1,142 @@
+# =====================================================================
+# race_abot_411_params.yaml —— 全部可调参数（现场调参只改这一个文件）
+# 加载方式：在 launch 里 <rosparam command="load" .../>，
+#          或手动 rosparam load 该文件 /race_abot_411_node
+# =====================================================================
+
+# ------------------ 话题 ------------------
+topics:
+  camera_front: "/camera/rgb/image_raw"      # 前置相机：巡线用
+  camera_sign:  "/camera/right/image_raw"    # 标志相机：YOLO 用
+  camera_back:  "/camera/back/image_raw"     # 后置相机
+  cmd:          "/akm_vel"                   # 底盘控制（abot_driver/Akm）
+  odom:         "/odom"
+  sonar:        "/sonar"                     # 超声（避障用，abot_driver 已发布）
+
+# ------------------ 标志检测 ------------------
+detect:
+  model_path: "/home/abot/yolov8/best.pt"    # ★上车改成真实路径（可用 aaabest.pt，含红/黄灯）
+  confidence: 0.70
+  iou: 0.45
+  device: "auto"
+  center_width_ratio: 0.45                    # 只认图像中心区域，滤掉路侧干扰
+  center_height_ratio: 0.55
+  center_y_shift: 60                          # 中心区域整体上移像素
+  # 同一标志的判定冷却（秒），避免一帧连续触发
+  sign_cooldown: 3.0
+
+# ------------------ 巡线 ------------------
+lane:
+  # 黄色车道线 HSV 双段阈值（黄色在色相环上跨段）
+  hsv_lower1: [15, 80, 100]
+  hsv_upper1: [40, 255, 255]
+  hsv_lower2: [0, 0, 0]        # 若不需要第二段，保持全 0（代码会自动忽略）
+  hsv_upper2: [0, 0, 0]
+  roi_top: 0.45                # ROI 起始高度比例（只看画面下方这段）
+  roi_bottom: 0.95
+  bands: 5                     # 把 ROI 横切成几条带做统计
+  min_pixels_per_band: 120     # 每条带至少多少黄色像素才算有效
+  use_both_lines: true         # 双线用中线，单线用偏移
+  single_line_offset_px: 260   # 只看到一条线时的目标偏移
+
+  speed: 0.20                  # 巡线速度 m/s
+  reverse_speed: 0.12          # 倒车巡线速度
+  steering_gain: 1.6           # 转向增益：steering = gain * 归一化偏差
+  steering_ema: 0.35           # 指数平滑系数（越大越灵敏，越小越稳）
+  max_steering: 1.0            # 转向输出限幅
+  max_steering_step: 0.15      # 单帧最大变化，防抖
+  slow_turn_threshold: 0.25    # 转向超过该值就降速
+  slow_turn_speed_factor: 0.65 # 转弯时的速度比例
+  diff_ratio: 0.27             # Akm.diff = angular * diff_ratio（差速补偿，沿用原车标定）
+
+# ------------------ 动作库 ------------------
+actions:
+  # 90°转弯
+  turn_linear: 0.25
+  turn_max_angular: 1.2
+  turn_target_deg: 90.0
+  turn_tolerance_rad: 0.10
+  turn_timeout_s: 8.0
+
+  # 180°翻转（掉头）
+  flip_target_deg: 180.0
+  flip_max_angular: 1.2
+  flip_timeout_s: 15.0
+
+  # 停留（STOP 标志）
+  stop_wait_s: 3.0
+
+  # 侧方停车（闭环：按里程计走位移+偏航，带超时）
+  parallel_parking:
+    approach_s: 1.2            # 先直行到位
+    slots:                     # 每段：linear / angular / duration
+      - [0.15,  0.0, 1.0]
+      - [-0.25, 0.6, 1.6]
+      - [-0.15, 0.0, 0.6]
+      - [0.10, -0.5, 1.2]
+      - [0.15,  0.5, 1.4]
+      - [-0.10, 0.0, 0.5]
+    total_timeout_s: 20.0
+
+  # 倒车入库
+  reverse_parking:
+    slots:
+      - [0.15,  0.0, 1.5]
+      - [-0.20, -0.5, 2.0]
+      - [-0.15, 0.0, 1.0]
+      - [0.10,  0.4, 1.2]
+    total_timeout_s: 20.0
+
+  # 单边桥：居中低速匀速通过
+  bridge:
+    speed: 0.10
+    duration_s: 4.0
+    steer_gain: 1.2            # 过桥时用更强的居中修正
+
+  # 避障
+  avoid:
+    sonar_threshold_m: 0.35    # 超声距离小于此值就绕
+    check_timeout_s: 0.3       # 多久收不到 sonar 就当作无障碍
+    back_off_speed: 0.10
+    back_off_s: 0.8            # 先退一点
+    side_turn_speed: 0.15
+    side_turn_angular: 0.8
+    side_turn_s: 1.6           # 侧向绕行时间
+    forward_speed: 0.18
+    forward_s: 1.5             # 绕过后直行通过
+    rejoin_s: 1.2              # 回归巡线过渡
+    total_timeout_s: 15.0
+
+  # S 弯正进（巡线到末端）
+  s_curve_in:
+    speed: 0.15
+    timeout_s: 15.0
+    end_trigger: "sign"        # sign=检测到"倒车"标志就停；odo=按里程计
+
+  # 车库 A -> B 搬运
+  garage_transfer:
+    mode: "sign"               # sign=靠标志触发；chain=固定动作串
+    slots:
+      - [0.15,  0.0, 1.5]
+      - [0.12,  0.6, 2.0]
+      - [0.15,  0.0, 1.5]
+    total_timeout_s: 18.0
+
+  # 定点停车 / 终点
+  final_stop_brake_s: 0.5
+
+# ------------------ 安全 ------------------
+safety:
+  no_steer_timeout_s: 1.0      # 巡线开启时，多久没更新转向就停车
+  watchdog_period_s: 10.0      # 日志心跳周期
+  max_task_time_s: 25.0        # 任何任务最长执行时间，超时强制结束并恢复
+  odom_stale_warn_s: 2.0       # 里程计多久没更新就告警（只告警不停车）
+  idle_stop_hz: 5.0            # 既不巡线也不执行动作时，以该频率补发停止指令
+
+# ------------------ 调试 ------------------
+debug:
+  enabled: true
+  show_lane_window: true
+  show_sign_window: true
+  keyboard_enabled: true       # 键盘调试（见 README）
+  log_level: "info"

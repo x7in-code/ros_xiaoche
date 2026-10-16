@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<!--
+  race_abot_411_debug.launch —— 调试模式
+  ============================================================
+  在 A 路线基础上额外启动：
+    - 巡线可视化窗口（/race_abot_411/lane_image 需要主控发布；本 launch 直接看原图）
+    - 标志检测可视化 image_view
+    - 关键话题监控
+
+  用法： roslaunch race_abot_411 race_abot_411_debug.launch
+  ============================================================
+-->
+<launch>
+
+  <arg name="model_path"  default="/home/abot/yolov8/best.pt"/>
+  <arg name="start_camera" default="true"/>
+  <arg name="route_yaml"  default="$(find race_abot_411)/config/race_abot_411_route_a.yaml"/>
+
+  <!-- 主流程（debug=true + 独立终端便于键盘调试） -->
+  <include file="$(find race_abot_411)/launch/race_abot_411_a.launch">
+    <arg name="model_path"   value="$(arg model_path)"/>
+    <arg name="start_camera" value="$(arg start_camera)"/>
+    <arg name="route_yaml"   value="$(arg route_yaml)"/>
+    <arg name="debug"        value="true"/>
+    <arg name="keyboard"     value="true"/>
+    <arg name="node_prefix"  value="xterm -e"/>
+  </include>
+
+  <!-- 标志检测可视化 -->
+  <node name="race_abot_411_sign_view" pkg="image_view" type="image_view"
+        respawn="false" output="log">
+    <remap from="image" to="/race_abot_411/sign_image"/>
+    <param name="autosize" value="true"/>
+  </node>
+
+  <!-- 原始前视图像（看巡线输入） -->
+  <node name="race_abot_411_front_view" pkg="image_view" type="image_view"
+        respawn="false" output="log">
+    <remap from="image" to="/camera/rgb/image_raw"/>
+    <param name="autosize" value="true"/>
+  </node>
+
+  <!-- 检测结果 & 控制指令监控 -->
+  <node name="race_abot_411_det_echo" pkg="rostopic" type="rostopic"
+        args="echo /race_abot_411/detections" output="screen" respawn="false"/>
+  <node name="race_abot_411_cmd_echo" pkg="rostopic" type="rostopic"
+        args="echo /akm_vel" output="log" respawn="false"/>
+
+</launch>
