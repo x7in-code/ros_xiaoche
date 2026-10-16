@@ -61,19 +61,28 @@ echo "[4/4] 编译 ..."
 # shellcheck disable=SC1091
 source /opt/ros/noetic/setup.bash
 cd "$WS_DIR"
-if ! catkin_make --pkg race_abot_411; then
-  echo "  [回退] 单包编译失败，尝试全量 catkin_make"
-  catkin_make
+# 只编译本包 + abot_driver：
+#   车上 abot 包有并行编译竞争缺陷（abot_base.cpp 未声明依赖 riki_msgs 的消息生成），
+#   裸 catkin_make -j 会随机失败；我们不需要它，绕开即可。
+if ! catkin_make --pkg race_abot_411 abot_driver; then
+  echo "  [回退] 单包编译失败，尝试串行全量 catkin_make -j1"
+  catkin_make -j1
 fi
 # shellcheck disable=SC1091
 source devel/setup.bash
 
 echo
+echo "  注意：catkin_make --pkg 会把「编译白名单」写进 CMake 缓存并且长期生效。"
+echo "        以后想全量编译，先执行： catkin_make -DCATKIN_WHITELIST_PACKAGES=\"\""
+if grep -qE '^CATKIN_WHITELIST_PACKAGES' "$WS_DIR/build/CMakeCache.txt" 2>/dev/null; then
+  echo "        当前白名单：$(grep -E '^CATKIN_WHITELIST_PACKAGES' "$WS_DIR/build/CMakeCache.txt" | cut -d= -f2-)"
+fi
+
+echo
 echo "======================================================"
-echo " 完成。当前终端已 source 好，可直接："
-echo "   roslaunch race_abot_411 race_abot_411_debug.launch"
-echo " 自检："
-echo "   rosrun race_abot_411 race_abot_411_diagnostics.py \\"
-echo "     _params_yaml:=\$(rospack find race_abot_411)/config/race_abot_411_params.yaml \\"
-echo "     _route_yaml:=\$(rospack find race_abot_411)/config/race_abot_411_route_a.yaml"
+echo " 完成。建议下一步："
+echo "   换车体检 : bash $PKG_DIR/tools/race_abot_411_start.sh check"
+echo "   一键启动 : bash $PKG_DIR/tools/race_abot_411_start.sh"
+echo "   （不要用裸 roslaunch —— 用 start.sh 会连同 master/驱动/相机一起拉好，"
+echo "     并生成 ~/race_abot_env.sh 供其他终端 source）"
 echo "======================================================"

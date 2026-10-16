@@ -5,17 +5,42 @@
 # =====================================================================
 
 # ------------------ 话题 ------------------
+# ★ 换车相关：camera_front / camera_sign 留空 = 自动挑一路真的在发布的相机。
+#   若填写了但车上没人发布该话题，节点会自动回退到候选列表里可用的那个（并打 WARN）。
 topics:
-  camera_front: "/camera/rgb/image_raw"      # 前置相机：巡线用
-  camera_sign:  "/camera/right/image_raw"    # 标志相机：YOLO 用
-  camera_back:  "/camera/back/image_raw"     # 后置相机
+  camera_front: ""                           # 巡线相机（留空=自动）
+  camera_sign:  ""                           # 标志相机（留空=自动）
+  # 自动挑选的候选顺序（一般不用改）
+  camera_candidates:
+    - "/camera/rgb/image_raw"
+    - "/camera/right/image_raw"
+    - "/camera/front/image_raw"
+    - "/camera/left/image_raw"
+    - "/camera/back/image_raw"
+    - "/usb_cam/image_raw"
+    - "/image_raw"
   cmd:          "/akm_vel"                   # 底盘控制（abot_driver/Akm）
   odom:         "/odom"
   sonar:        "/sonar"                     # 超声（避障用，abot_driver 已发布）
 
 # ------------------ 标志检测 ------------------
 detect:
-  model_path: "/home/abot/yolov8/best.pt"    # ★上车改成真实路径（可用 aaabest.pt，含红/黄灯）
+  # ★★ 模型路径：留空 = 自动查找（推荐，换车不用改）
+  #    自动顺序：下面的 model_candidates -> model_globs 搜索，且优先 aaabest.pt
+  #    想固定就填绝对路径，例如 "/home/abot/catkin_ws/src/traffic_detector/models/aaabest.pt"
+  model_path: ""
+  model_candidates:
+    - "~/catkin_ws/src/traffic_detector/models/aaabest.pt"
+    - "~/catkin_ws/src/traffic_detector/models/best.pt"
+    - "~/catkin_ws/src/yolov8_ros/models/aaabest.pt"
+    - "~/catkin_ws/src/yolov8_ros/models/best.pt"
+    - "/home/abot/yolov8/aaabest.pt"
+    - "/home/abot/yolov8/best.pt"
+  model_globs:                                # 上面都没有时的兜底搜索
+    - "~/catkin_ws/src/**/aaabest.pt"
+    - "~/catkin_ws/src/**/best.pt"
+    - "~/models/*.pt"
+    - "~/yolov8/*.pt"
   confidence: 0.70
   iou: 0.45
   device: "auto"

@@ -184,28 +184,36 @@ class_alias:
   turn_left:        ["turnleft", "left_turn", "left"]
   turn_right:       ["turnright", "right_turn", "right"]
   stop:             ["tingliu", "stop_sign", "halt"]
-  obstacle:         ["obstacle_car", "barrier", "car"]          # car.pt / mmbest.pt 里的 "car"
+  # ★ 实机 aaabest.pt 用的是拼音 "zhangai"（2026-10-16 实测确认）
+  obstacle:         ["zhangai", "obstacle_car", "barrier", "car"]
   reverse:          ["daoche", "back", "reverse_lane"]
-  flip:             ["turn", "fanzhuan", "u_turn"]              # 原 best.pt 里的 "turn" 即翻转
+  flip:             ["turn", "fanzhuan", "u_turn"]
   finish:           ["final", "zhongdian", "end"]
   parallel_parking: ["cefang", "Parallel_parking", "parking_p"]
-  single_bridge:    ["danbian", "bridge", "unilateral_bridge"]
+  # ★ 实机 aaabest.pt 用的是拼音 "danbain"（注意拼写不是 danbian！）
+  single_bridge:    ["danbain", "danbian", "bridge", "unilateral_bridge"]
   reverse_parking:  ["ruku", "park_reverse", "in_garage"]
 
+# 未被映射的类别（会被忽略，不会触发任何任务）：
+#   yellow —— 黄灯，规则里只要求红/绿，暂不处理
+
 # =====================================================================
-# 当前 4 个模型（best/car/aaabest/mmbest）的类别覆盖情况
-#   have: true  已有；false 需要补标注重训
+# 类别覆盖情况（2026-10-16 实机跑通 aaabest.pt 后按实测结果更新）
+#   aaabest.pt 实测 13 类：
+#     yellow / red / green_light / final / zhangai / turn / stop
+#     / daoche / danbain / turn_left / turn_right / cefang / ruku
+#   → 障碍物(zhangai) 与 单边桥(danbain) 都有！无需补标注重训。
 # =====================================================================
 class_coverage:
   green_light:      {have: true,  models: ["best.pt", "aaabest.pt"]}
-  red_light:        {have: false, models: [], note: "只有 aaabest.pt 有 red/yellow，建议换 aaabest.pt"}
+  red_light:        {have: true,  models: ["aaabest.pt"], note: "aaabest.pt 里叫 red"}
   turn_left:        {have: true,  models: ["best.pt", "car.pt", "aaabest.pt", "mmbest.pt"]}
   turn_right:       {have: true,  models: ["best.pt", "car.pt", "aaabest.pt", "mmbest.pt"]}
   stop:             {have: true,  models: ["best.pt", "car.pt", "aaabest.pt", "mmbest.pt"]}
-  obstacle:         {have: false, models: [], note: "★15分项，必须补标注（黄色跑车）"}
+  obstacle:         {have: true,  models: ["aaabest.pt"], note: "aaabest.pt 里叫 zhangai（15分项）"}
   reverse:          {have: true,  models: ["best.pt", "car.pt", "aaabest.pt", "mmbest.pt"], note: "对应 daoche"}
   flip:             {have: true,  models: ["best.pt", "aaabest.pt"], note: "对应 turn"}
   finish:           {have: true,  models: ["best.pt", "car.pt", "aaabest.pt", "mmbest.pt"], note: "对应 final"}
   parallel_parking: {have: true,  models: ["best.pt", "aaabest.pt"], note: "对应 cefang"}
-  single_bridge:    {have: false, models: [], note: "★10分项，必须补标注（通过单边桥）"}
+  single_bridge:    {have: true,  models: ["aaabest.pt"], note: "aaabest.pt 里叫 danbain（10分项）"}
   reverse_parking:  {have: true,  models: ["best.pt", "aaabest.pt"], note: "对应 ruku"}

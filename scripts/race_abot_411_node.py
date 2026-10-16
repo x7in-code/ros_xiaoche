@@ -35,7 +35,8 @@ from std_msgs.msg import Float32, String
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from race_abot_411_common import (AkmIO, build_alias_index, deep_merge,  # noqa: E402
-                              load_yaml, normalize_class, clamp)
+                              load_yaml, normalize_class, clamp,
+                              resolve_camera_topic)
 from race_abot_411_lane import LaneFollower          # noqa: E402
 from race_abot_411_actions import RaceActions        # noqa: E402
 
@@ -83,7 +84,11 @@ class RaceAbotNode(object):
         saf = P.get('safety') or {}
         lp = P.get('lane') or {}
 
-        self.topic_cam_front = tp.get('camera_front', '/camera/rgb/image_raw')
+        # 巡线相机：配置优先，配置的话题没人发布就自动换成实际在用的那路（换车必备）
+        want_front = (rospy.get_param('~camera_front', '')
+                      or tp.get('camera_front') or '')
+        self.topic_cam_front, _cands = resolve_camera_topic(
+            want_front, tp.get('camera_candidates'), name="前视相机")
         self.topic_cmd = tp.get('cmd', '/akm_vel')
         self.topic_odom = tp.get('odom', '/odom')
         self.topic_sonar = tp.get('sonar', '/sonar')
@@ -171,6 +176,9 @@ class RaceAbotNode(object):
             rospy.loginfo("  [%02d] %-16s trigger=%-5s sign=%-18s action=%s",
                           i + 1, t.get('name', ''), t.get('trigger', ''),
                           str(t.get('sign')), t.get('action', ''))
+        rospy.loginfo("巡线相机=%s | 标志检测=%s | 控制=%s | 里程计=%s",
+                      self.topic_cam_front, self.topic_det,
+                      self.topic_cmd, self.topic_odom)
         rospy.loginfo("=" * 60)
 
     # ==================================================================

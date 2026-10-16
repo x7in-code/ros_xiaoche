@@ -31,7 +31,9 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import String
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from race_abot_411_common import build_alias_index, normalize_class, load_yaml  # noqa: E402
+from race_abot_411_common import (build_alias_index, load_yaml,  # noqa: E402
+                                  normalize_class, resolve_camera_topic,
+                                  resolve_model_path)
 
 
 class SignDetector(object):
@@ -39,23 +41,47 @@ class SignDetector(object):
     def __init__(self):
         rospy.init_node('race_abot_411_sign_detect', anonymous=False)
 
-        self.model_path = rospy.get_param('~model_path', '/home/abot/yolov8/best.pt')
-        self.conf = float(rospy.get_param('~confidence', 0.70))
-        self.iou = float(rospy.get_param('~iou', 0.45))
-        self.device = rospy.get_param('~device', 'auto')
-        self.img_topic = rospy.get_param('~image_topic', '/camera/right/image_raw')
+        # 优先级：launch/命令行传入的 ~model_path  >  params.yaml 的 detect.model_path  >  自动查找
+        params_yaml = rospy.get_param('~params_yaml', '')
+        pcfg = load_yaml(params_yaml) if params_yaml else {}
+        dp = pcfg.get('detect') or {}
+        tp = pcfg.get('topics') or {}
+
+        want_model = (rospy.get_param('~model_path', '')
+                      or dp.get('model_path') or '')
+        self.model_path, tried = resolve_model_path(
+            want_model,
+            candidates=dp.get('model_candidates'),
+            globs=dp.get('model_globs'))
+        if not want_model:
+            rospy.loginfo("模型路径留空 -> 自动查找")
+
+        self.conf = float(rospy.get_param('~confidence', dp.get('confidence', 0.70)))
+        self.iou = float(rospy.get_param('~iou', dp.get('iou', 0.45)))
+        self.device = rospy.get_param('~device', dp.get('device', 'auto'))
+
+        # 相机话题：配置优先，配置的话题没人发就自动换（换车必备）
+        want_topic = (rospy.get_param('~image_topic', '')
+                      or tp.get('camera_sign') or '')
+        self.img_topic, cands = resolve_camera_topic(
+            want_topic, tp.get('camera_candidates'), name="标志相机")
+
         self.out_topic = rospy.get_param('~output_topic', '/race_abot_411/detections')
         self.vis_topic = rospy.get_param('~vis_topic', '/race_abot_411/sign_image')
 
-        self.cw = float(rospy.get_param('~center_width_ratio', 0.45))
-        self.ch = float(rospy.get_param('~center_height_ratio', 0.55))
-        self.cshift = int(rospy.get_param('~center_y_shift', 60))
+        self.cw = float(rospy.get_param('~center_width_ratio',
+                                        dp.get('center_width_ratio', 0.45)))
+        self.ch = float(rospy.get_param('~center_height_ratio',
+                                        dp.get('center_height_ratio', 0.55)))
+        self.cshift = int(rospy.get_param('~center_y_shift',
+                                          dp.get('center_y_shift', 60)))
 
         # 类别归一化表：从路线 yaml 读，没有就用空表
         route_yaml = rospy.get_param('~route_yaml', '')
         cfg = load_yaml(route_yaml) if route_yaml else {}
         self.alias = build_alias_index(cfg.get('class_alias', {}))
         rospy.loginfo("类别别名表条数: %d", len(self.alias))
+        rospy.loginfo("模型路径: %s", self.model_path or '(未找到)')
 
         self.model = None
         self._load_model()
@@ -69,8 +95,11 @@ class SignDetector(object):
                       self.model_path, self.img_topic, self.out_topic)
 
     def _load_model(self):
-        if not os.path.isfile(self.model_path):
-            rospy.logerr("模型文件不存在: %s（请改 ~model_path 参数）", self.model_path)
+        if not self.model_path or not os.path.isfile(self.model_path):
+            rospy.logerr("模型文件不存在: %s", self.model_path or '(空)')
+            rospy.logerr("  已检查过这些路径：%s", tried)
+            rospy.logerr("  请在 config/race_abot_411_params.yaml 的 "
+                         "detect.model_path 填写真实路径，或留空让它自动找")
             return
         try:
             from ultralytics import YOLO

@@ -15,19 +15,27 @@
 <launch>
 
   <!-- ===== 可调参数 ===== -->
-  <arg name="model_path"   default="/home/abot/yolov8/best.pt"
-       doc="YOLO 权重路径（建议 aaabest.pt，含红/黄灯）"/>
-  <arg name="confidence"   default="0.70"/>
-  <arg name="start_camera" default="true"
-       doc="是否一并启动相机（abot cam.launch，需已设 CAMERA 环境变量）"/>
+  <arg name="model_path"   default=""
+       doc="YOLO 权重路径。留空(推荐)则使用 config/race_abot_411_params.yaml 的 detect.model_path"/>
+  <arg name="confidence"   default=""
+       doc="置信度阈值。留空则使用 config 里的 detect.confidence"/>
+  <arg name="start_camera" default="false"
+       doc="是否一并启动相机。默认 false：建议用你们平时的方式单独起相机。
+            设为 true 会 include abot 的 cam.launch —— 注意它的 usb 分支只提供
+            /camera/rgb 与 /camera/back，【不提供 /camera/right】，
+            那种情况下需要把 camera_sign 指到实际存在的话题"/>
   <arg name="debug"        default="true"/>
   <arg name="keyboard"     default="true"/>
   <arg name="node_prefix"  default=""
        doc="主控节点启动前缀；要键盘调试就设 'xterm -e'"/>
   <arg name="route_yaml"   default="$(find race_abot_411)/config/race_abot_411_route_a.yaml"/>
   <arg name="params_yaml"  default="$(find race_abot_411)/config/race_abot_411_params.yaml"/>
-  <arg name="camera_front" default="/camera/rgb/image_raw"/>
-  <arg name="camera_sign"  default="/camera/right/image_raw"/>
+  <!-- 相机话题：留空(推荐)= 节点自动挑一路真的在发布的话题（换车必备）。
+       要固定就传 camera_sign:=/camera/xxx/image_raw -->
+  <arg name="camera_front" default=""
+       doc="巡线相机话题，留空=自动"/>
+  <arg name="camera_sign"  default=""
+       doc="标志相机话题，留空=自动"/>
 
   <!-- ===== 1. 相机（可选）===== -->
   <include if="$(arg start_camera)" file="$(find abot)/launch/cam.launch"/>
@@ -36,15 +44,16 @@
   <node name="race_abot_411_sign_detect" pkg="race_abot_411"
         type="race_abot_411_sign_detect.py" output="screen"
         respawn="true" respawn_delay="3">
-    <param name="model_path"          value="$(arg model_path)"/>
-    <param name="confidence"          value="$(arg confidence)"/>
+    <!-- 参数一律从 params.yaml 读；只有显式传了 arg 才覆盖 -->
+    <param name="params_yaml"         value="$(arg params_yaml)"/>
+    <param name="route_yaml"          value="$(arg route_yaml)"/>
     <param name="image_topic"         value="$(arg camera_sign)"/>
     <param name="output_topic"        value="/race_abot_411/detections"/>
     <param name="vis_topic"           value="/race_abot_411/sign_image"/>
-    <param name="route_yaml"          value="$(arg route_yaml)"/>
-    <param name="center_width_ratio"  value="0.45"/>
-    <param name="center_height_ratio" value="0.55"/>
-    <param name="center_y_shift"      value="60"/>
+    <param name="model_path"          value="$(arg model_path)"
+           if="$(eval arg('model_path') != '')"/>
+    <param name="confidence"          value="$(arg confidence)"
+           if="$(eval arg('confidence') != '')"/>
   </node>
 
   <!-- ===== 3. 主控 ===== -->

@@ -12,18 +12,24 @@
 -->
 <launch>
 
-  <arg name="model_path"  default="/home/abot/yolov8/best.pt"/>
-  <arg name="start_camera" default="true"/>
+  <arg name="model_path"  default=""
+       doc="留空则用 config 里的 detect.model_path（或自动查找）"/>
+  <arg name="start_camera" default="false"
+       doc="默认 false：相机建议用 tools/race_abot_411_start.sh 或你们自己的方式单独起"/>
+  <arg name="node_prefix" default=""
+       doc="主控启动前缀。要键盘调试且已装 xterm，就传 node_prefix:='xterm -e'"/>
   <arg name="route_yaml"  default="$(find race_abot_411)/config/race_abot_411_route_a.yaml"/>
+  <arg name="camera_front_view" default="/camera/rgb/image_raw"
+       doc="只用于可视化窗口；若车上没有该话题，改成实际存在的那路即可"/>
 
-  <!-- 主流程（debug=true + 独立终端便于键盘调试） -->
+  <!-- 主流程（debug=true + 键盘调试；node_prefix 默认空，避免新车没装 xterm 起不来） -->
   <include file="$(find race_abot_411)/launch/race_abot_411_a.launch">
     <arg name="model_path"   value="$(arg model_path)"/>
     <arg name="start_camera" value="$(arg start_camera)"/>
     <arg name="route_yaml"   value="$(arg route_yaml)"/>
     <arg name="debug"        value="true"/>
     <arg name="keyboard"     value="true"/>
-    <arg name="node_prefix"  value="xterm -e"/>
+    <arg name="node_prefix"  value="$(arg node_prefix)"/>
   </include>
 
   <!-- 标志检测可视化 -->
@@ -36,7 +42,7 @@
   <!-- 原始前视图像（看巡线输入） -->
   <node name="race_abot_411_front_view" pkg="image_view" type="image_view"
         respawn="false" output="log">
-    <remap from="image" to="/camera/rgb/image_raw"/>
+    <remap from="image" to="$(arg camera_front_view)"/>
     <param name="autosize" value="true"/>
   </node>
 

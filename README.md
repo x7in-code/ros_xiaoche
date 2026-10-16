@@ -28,14 +28,16 @@
 race_abot_411/
 ├── package.xml
 ├── CMakeLists.txt
+├── README.md                          # 本文
+├── DEPLOY.md                          # ★ 换车部署清单（明天换车先看这个）
 ├── launch/
 │   ├── race_abot_411_a.launch         # A 路线一键启动
-│   └── race_abot_411_debug.launch     # 调试（可视化 + 独立终端）
+│   └── race_abot_411_debug.launch     # 调试（可视化）
 ├── config/
 │   ├── race_abot_411_params.yaml      # 全部可调参数（现场只改这个）
 │   └── race_abot_411_route_a.yaml     # A 路线任务队列 + 标志→动作映射 + 类别归一化
 ├── scripts/
-│   ├── race_abot_411_common.py        # 公共：角度/EMA/类别归一化/底盘接口 AkmIO
+│   ├── race_abot_411_common.py        # 公共：角度/EMA/类别归一化/底盘接口/换车自适应
 │   ├── race_abot_411_lane.py          # 巡线：HSV 黄线 + 分带取中 + 平滑限幅
 │   ├── race_abot_411_actions.py       # 动作库（含避障/过桥/S弯/泊车/车库搬运）
 │   ├── race_abot_411_node.py          # 主节点：任务队列状态机
@@ -43,6 +45,8 @@ race_abot_411/
 │   ├── race_abot_411_fake_sign.py     # 调试：伪造标志（无模型/无场地也能联调）
 │   └── race_abot_411_diagnostics.py   # 现场自检（上车第一步先跑）
 └── tools/
+    ├── race_abot_411_start.sh         # ★ 一键启动 / 体检 / 停止（换车友好）
+    ├── race_abot_411_update.sh        # 车上一键更新（git pull + 修 CRLF + 编译）
     ├── race_abot_411_record.sh        # 录 bag
     └── race_abot_411_rename.sh        # 一键改前缀成你们队名
 ```
@@ -55,9 +59,9 @@ race_abot_411/
 |---|---|---|---|---|
 | 绿灯启动 | 5 | `green_light` | `start` | ✅ |
 | 转向标识 | 5 | `turn_left` / `turn_right` | `turn_left/right`（90°闭环） | ✅ |
-| 单边桥 ×2 | 10 | `single_bridge` | `cross_bridge`（低速居中） | ✅ 代码就绪，**标志需补标注** |
+| 单边桥 ×2 | 10 | `single_bridge`(实为 `danbain`) | `cross_bridge`（低速居中） | ✅ 类别已确认存在 |
 | 直角弯 ×2 | 10 | 无标志 | `lane_only`（巡线通过） | ✅ |
-| 避障区 | 15 | `obstacle` | `obstacle_avoid`（`/sonar` 绕障） | ✅ 代码就绪，**标志需补标注** |
+| 避障区 | 15 | `obstacle`(实为 `zhangai`) | `obstacle_avoid`（`/sonar` 绕障） | ✅ 类别已确认存在 |
 | 侧方停车 | 20 | `parallel_parking` | `parallel_parking` | ✅ 参数化动作串 |
 | 倒入车库 A | 20 | `reverse_parking` | `reverse_parking` | ✅ 参数化动作串 |
 | 车库 A→B | 20 | 无标志 | `garage_transfer` | ✅ 固定串（后续可换定位） |
@@ -151,19 +155,44 @@ rosrun race_abot_411 race_abot_411_diagnostics.py \
 
 | # | 项目 | 怎么确认 | 不做会怎样 |
 |---|---|---|---|
-| 1 | 模型路径 | 改 `config/race_abot_411_params.yaml` 的 `detect.model_path`（默认 `/home/abot/yolov8/best.pt`） | 检测节点报"模型文件不存在"，一个标志都识别不到 |
-| 2 | 环境变量 | `CAMERA`、`CMM_MODE=serial` 等已设（通常在 `~/.bashrc`） | `cam.launch` 直接报 `env XXX is not set` |
-| 3 | 底盘与相机 | `abot_driver` 能出 `/odom`、`/battery`；相机出 `/camera/rgb/image_raw` | 车不动 / 巡线失效（自检脚本会标红） |
+| 1 | 模型路径 | **留空即自动查找**（`params.yaml` 的 `detect.model_path` 默认空，会按候选顺序找 aaabest.pt）；想固定就填绝对路径 | 自动也找不到时，检测节点报"模型文件不存在"，一个标志都识别不到 |
+| 2 | 环境变量 | 只有 `start_camera:=true`（用 abot 的 cam.launch）时才需要 `CAMERA`、`CMM_MODE` 等 | 那种情况下 `cam.launch` 会报 `env XXX is not set` |
+| 3 | 底盘与相机 | `abot_driver` 能出 `/akm_vel`、`/odom`、`/battery`；相机有图 | 车不动 / 巡线失效（自检脚本会标红） |
 | 4 | ultralytics | `python3 -c "import ultralytics"` | 标志检测节点起不来（自检脚本会警告） |
 
 超声 `/sonar` 没有也能跑，只是避障会退化为"低速直行通过"。
 
 ### 4.4 如果车上没有 abot 包
 
-`race_abot_411_a.launch` 默认会 `include $(find abot)/launch/cam.launch` 一起起相机。
-车上若没有 `abot` 这个包，就加 `start_camera:=false`，自己在别处起相机即可：
+`race_abot_411_a.launch` 的 `start_camera:=true` 会 `include $(find abot)/launch/cam.launch`。
+车上若没有 `abot` 这个包，用默认的 `start_camera:=false`（**默认已是 false**），自己在别处起相机即可。
+
+### 4.5 换一辆车（明天不用同一台车）
+
+**一句话**：`放代码 → 编译 → 体检 → 启动`，细节看 **[DEPLOY.md](DEPLOY.md)**。
+
 ```bash
-roslaunch race_abot_411 race_abot_411_a.launch start_camera:=false
+cd ~/catkin_ws/src/race_abot_411
+
+bash tools/race_abot_411_start.sh check    # ① 只读体检：ROS/工作区/白名单/相机设备/模型/依赖
+cd ~/catkin_ws && catkin_make --pkg race_abot_411 abot_driver && source devel/setup.bash   # ②
+cd ~/catkin_ws/src/race_abot_411
+bash tools/race_abot_411_start.sh          # ③ 一键启动（自动清场+master+驱动+相机+主系统）
+```
+
+本包对换车做了这些**自动适配**，一般不用改代码：
+
+| 会变的 | 自动适配方式 |
+|---|---|
+| 模型权重路径 | `detect.model_path` 留空 → 按候选顺序 + glob 查找，**优先 aaabest.pt** |
+| 相机话题名 | `topics.camera_*` 留空 → 自动挑一路**真的在发布**的话题 |
+| 相机设备号 | 启动脚本逐个试 `/dev/video*`，**直到出图**为止 |
+| master 地址 | 启动脚本统一设好并写进 `~/race_abot_env.sh`；连共享 master 用 `MASTER=` 覆盖 |
+
+**每个新终端**记得先对齐环境（避免 `Unable to communicate with master`）：
+
+```bash
+source ~/race_abot_env.sh
 ```
 
 ---
@@ -171,18 +200,19 @@ roslaunch race_abot_411 race_abot_411_a.launch start_camera:=false
 ## 5. 启动
 
 ```bash
-# A 路线正常跑
-roslaunch race_abot_411 race_abot_411_a.launch
+# 推荐：一键启动（自动清场 + master + 底盘 + 相机 + 主系统）
+bash tools/race_abot_411_start.sh
+bash tools/race_abot_411_start.sh check     # 只体检
+bash tools/race_abot_411_start.sh stop      # 全停
 
-# 换模型（强烈建议用 aaabest.pt，它有红/黄灯）
-roslaunch race_abot_411 race_abot_411_a.launch model_path:=/home/abot/yolov8/aaabest.pt
-
-# 调试模式（可视化 + 独立终端，键盘可用）
-roslaunch race_abot_411 race_abot_411_debug.launch
+# 或者用 roslaunch
+roslaunch race_abot_411 race_abot_411_a.launch          # 模型/相机话题都会自动找
+roslaunch race_abot_411 race_abot_411_a.launch model_path:=/路径/aaabest.pt   # 手动指定模型
+roslaunch race_abot_411 race_abot_411_debug.launch      # 调试模式（可视化）
 ```
 
-**跑之前必须先改的路径**：`config/race_abot_411_params.yaml` 里的
-`detect.model_path`（现在写的是 `/home/abot/yolov8/best.pt`）。
+> `detect.model_path` 留空时**不需要再改路径**——节点会自动查找并打印实际使用的路径
+> （`模型路径: /xxx/aaabest.pt`）。日志里同时会打印 `模型类别(13): [...]`，这是判断加载成功的标志。
 
 ---
 
@@ -242,12 +272,20 @@ rosbag play --loop ~/bags/lap1.bag
 
 1. **A 路线的确切任务顺序需在真实赛道核对一次**（规则文字没给出"左转×3 / 翻转"的插点位置）。
    核对后只改 `race_abot_411_route_a.yaml` 即可。
-2. **必须补两个标志的标注并重训**：`obstacle`（黄色跑车，15 分）、`single_bridge`（通过单边桥，10 分）——
-   现有 4 个权重都没有这两类。详见 `race_abot_411_route_a.yaml` 的 `class_coverage`。
-3. 红灯：只有 `aaabest.pt` 含 `red`，建议换它。
-4. 原 `traffic_detector/scripts/` 有 20+ 个重复历史脚本可清理（`08.py`、`123456.py`、
+2. ~~必须补两个标志的标注并重训~~ —— **已排除**。2026-10-16 实机跑通 `aaabest.pt`，
+   实测它有 13 类，其中 `zhangai`(=障碍物, 15分) 与 `danbain`(=单边桥, 10分) **本来就有**。
+   之前判断"缺失"是因为解包 .pt 时用英文关键词搜索而漏掉了拼音命名，已更正。
+   ⚠️ 注意拼写是 **`danbain`** 不是 `danbian`（原 `core_new.py` 判断的 `'danbian'` 拼错，
+   那个分支从来没生效过）；`class_alias` 里两种拼写都已收录。
+3. **统一用 `aaabest.pt`**：4 个权重里只有它同时含 `red`/`yellow`(红绿灯) + `zhangai` + `danbain`，
+   是唯一能覆盖全部任务点的模型。
+4. `yellow`（黄灯）暂未映射，会被忽略 —— 规则只要求红/绿。
+5. 原 `traffic_detector/scripts/` 有 20+ 个重复历史脚本可清理（`08.py`、`123456.py`、
    `xiaotao（b）.py`、`xunji*`、`mmmdd`、`yuan`、`car/car1`、`15*`、`keep*` 等），
    但**本次未删除任何文件**，需要清理请先备份再自行确认。
+6. 小车实测注意：`roscore` 要单独终端常驻；多网卡环境建议
+   `export ROS_MASTER_URI=http://127.0.0.1:11311` + `export ROS_IP=127.0.0.1`
+   （`tools/race_abot_411_start.sh` 已内置）。
 
 ---
 
@@ -267,7 +305,31 @@ bash tools/race_abot_411_rename.sh --apply race_你的队名         # 真正改
 
 ## 10. 变更记录
 
-### v1.1（本次完善）
+### v1.2 —— 实机跑通 + 换车自适应
+- **实机验证通过**：在 Ubuntu 20.04 + Noetic 的 abot 小车上跑通了
+  编译 → 包注册 → 主节点 → 检测节点 → 相机 → 底盘 → 模型加载（13 类）全链路。
+- **★ 类别别名按实机更正**：`aaabest.pt` 用的是**拼音**，
+  真实类别为 `zhangai`（障碍物，15 分项）与 `danbain`（单边桥，10 分项，
+  注意拼写不是 `danbian`）。已加入别名表并实测映射全绿 —— **25 分项无需重新标注训练**。
+- **★ 换车自适应（本次核心）**：新增 `resolve_camera_topic()` 与 `resolve_model_path()`，
+  相机话题和模型权重都可以**留空自动找**：
+  - 相机：按候选列表挑一路**真的在发布**的话题，配置的没发布就自动回退并打 WARN；
+  - 模型：按候选路径 + glob 搜索，**优先 `aaabest.pt`**（只有它含红/黄灯）。
+- **★ 启动脚本重写为 `start | check | stop` 三模式**：
+  - `check` 只读体检：ROS/工作区/**编译白名单**/关键包/`/dev/video*`/模型/依赖；
+  - `start` 相机**逐个试 `/dev/video*` 直到真正出图**（用 `rostopic hz` 验证，不只是看发布者）；
+  - 生成 `~/race_abot_env.sh`，解决"新终端连不上 master"；
+  - 支持 `MODEL= / CAM_DEV= / USE_CAMERA=0 / MASTER= / WS=` 覆盖。
+- **修复模型路径被 launch 覆盖**：`race_abot_411_a.launch` 的 `model_path` 默认改为空，
+  以 `params.yaml` 为唯一权威配置源（原先 launch 里的硬编码会覆盖 yaml，改 yaml 不生效）。
+- **`camera_sign` 默认不再写死 `/camera/right/image_raw`**（实机那台车没有这个话题，
+  只有 `/camera/rgb` 与 `/camera/back`），改为留空自动挑选。
+- **`debug.launch` 默认值改稳**：`start_camera=false`、`node_prefix=""`
+  （原先默认 `xterm -e`，新车没装 xterm 会直接起不来）。
+- **新增 `DEPLOY.md`**：换车部署清单 + 换车差异对照表 + 故障排查表。
+- 新增 `model_candidates` / `model_globs` / `camera_candidates` 配置项。
+
+### v1.1
 - **包名/前缀改为 `race_abot_411`**（按需求加 411 后缀；全包统一前缀，与队友隔离）。
 - **新增 `race_abot_411_diagnostics.py` 现场自检节点**：上车先跑，一次性报告环境/依赖/模型/
   配置/话题/类别缺口，避免"上车才发现没数据"。
